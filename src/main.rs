@@ -1,10 +1,9 @@
+mod args;
+mod command;
 mod utils;
-use std::{
-    fs::File,
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
+use args::{AccountArgs, CollectArgs};
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -179,29 +178,7 @@ struct Args {
 enum Commands {
     #[command(about = "Fetch your account details")]
     Account(AccountArgs),
-}
-#[derive(Parser, Debug)]
-pub struct AccountArgs {
-    #[arg(value_name = "ADDRESS", help = "The address to the account to fetch.")]
-    pub address: Option<String>,
-
-    #[arg(
-        short,
-        long,
-        value_name = "PROOF_ADDRESS",
-        help = "The address of the proof to fetch."
-    )]
-    pub proof: Option<String>,
-
-    #[command(subcommand)]
-    pub command: Option<AccountCommand>,
+    #[command(about = "Start collecting on your local machine")]
+    Collect(CollectArgs),
 }
 
-#[derive(Subcommand, Clone, Debug)]
-pub enum AccountCommand {
-    #[command(about = "Close an account and reclaim rent.")]
-    Close(AccountCloseArgs),
-}
-
-#[derive(Parser, Clone, Debug)]
-pub struct AccountCloseArgs {}
