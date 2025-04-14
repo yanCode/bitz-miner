@@ -1,10 +1,18 @@
 mod utils;
-use std::sync::{Arc, RwLock};
+use std::{
+    fs::File,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::{
+    commitment_config::CommitmentConfig,
+    signature::{Keypair, read_keypair_file},
+};
+use utils::{PoolCollectingData, SoloCollectingData};
 
 #[tokio::main]
 async fn main() {
@@ -27,6 +35,19 @@ async fn main() {
     let default_keypair = args.keypair.unwrap_or(cli_config.keypair_path.clone());
     let fee_payer_filepath = args.fee_payer.unwrap_or(default_keypair.clone());
     let rpc_client = RpcClient::new_with_commitment(cluster_url, CommitmentConfig::confirmed());
+    let solo_collecting_data = Arc::new(RwLock::new(Vec::new()));
+    let pool_collecting_data = Arc::new(RwLock::new(Vec::new()));
+    let miner = Miner::new(
+        Arc::new(rpc_client),
+        args.priority_fee,
+        Some(default_keypair),
+        args.dynamic_fee_url,
+        args.dynamic_fee,
+        Some(fee_payer_filepath),
+        solo_collecting_data,
+        pool_collecting_data,
+    );
+    println!("{:?}", miner.signer())
 }
 
 #[derive(Clone)]
@@ -37,8 +58,67 @@ struct Miner {
     pub dynamic_fee: bool,
     pub rpc_client: Arc<RpcClient>,
     pub fee_payer_filepath: Option<String>,
-    // pub solo_collecting_data: Arc<RwLock<Vec<SoloCollectingData>>>,
-    // pub pool_collecting_data: Arc<std::sync::RwLock<Vec<PoolCollectingData>>>,
+    pub solo_collecting_data: Arc<RwLock<Vec<SoloCollectingData>>>,
+    pub pool_collecting_data: Arc<std::sync::RwLock<Vec<PoolCollectingData>>>,
+}
+impl Miner {
+    pub fn new(
+        rpc_client: Arc<RpcClient>,
+        priority_fee: Option<u64>,
+        keypair_filepath: Option<String>,
+        dynamic_fee_url: Option<String>,
+        dynamic_fee: bool,
+        fee_payer_filepath: Option<String>,
+        solo_collecting_data: Arc<RwLock<Vec<SoloCollectingData>>>,
+        pool_collecting_data: Arc<RwLock<Vec<PoolCollectingData>>>,
+    ) -> Self {
+        Self {
+            rpc_client,
+            keypair_filepath,
+            priority_fee,
+            dynamic_fee_url,
+            dynamic_fee,
+            fee_payer_filepath,
+            solo_collecting_data,
+            pool_collecting_data,
+        }
+    }
+
+    pub fn signer(&self) -> Keypair {
+        match self.keypair_filepath.clone() {
+            Some(filepath) => Miner::read_keypair_from_file(filepath.clone()),
+            None => panic!("No keypair provided"),
+        }
+    }
+    pub fn read_keypair_from_file(filepath: String) -> Keypair {
+        use solana_sdk::signature::{Keypair, read_keypair_file};
+        use std::fs::File;
+        use std::io::Read;
+        use std::path::Path;
+
+        if !Path::new(&filepath).exists() {
+            panic!("File not found at {}", filepath);
+        }
+
+        match read_keypair_file(&filepath) {
+            Ok(keypair) => keypair,
+            Err(_) => {
+                // Try to read as base58 string
+                let mut file = File::open(&filepath).expect("Failed to open file");
+                let mut contents = String::new();
+                file.read_to_string(&mut contents)
+                    .expect("Failed to read file contents");
+                let trimmed_contents = contents.trim();
+                Keypair::from_base58_string(trimmed_contents)
+            }
+        }
+    }
+    pub fn fee_payer(&self) -> Keypair {
+        match self.fee_payer_filepath.clone() {
+            Some(filepath) => Miner::read_keypair_from_file(filepath.clone()),
+            None => panic!("No fee payer keypair provided"),
+        }
+    }
 }
 
 #[derive(Parser, Debug)]
