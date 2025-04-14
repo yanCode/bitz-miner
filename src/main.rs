@@ -1,6 +1,7 @@
 mod args;
 mod command;
 mod utils;
+mod send;
 use std::sync::{Arc, RwLock};
 
 use args::{AccountArgs, CollectArgs};
@@ -46,7 +47,13 @@ async fn main() {
         solo_collecting_data,
         pool_collecting_data,
     );
-    println!("{:?}", miner.signer())
+    let _signer = miner.signer();
+    match args.command {
+        Commands::Collect(collect_args) => {
+            println!("Collecting...{:?}", collect_args);
+        }
+        _ => {}
+    }
 }
 
 #[derive(Clone)]
@@ -181,4 +188,3 @@ enum Commands {
     #[command(about = "Start collecting on your local machine")]
     Collect(CollectArgs),
 }
-
