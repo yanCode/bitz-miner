@@ -1,5 +1,8 @@
 use std::io::Read;
 
+use chrono::{Local, TimeZone};
+use eore_api::consts::TOKEN_DECIMALS;
+
 pub fn ask_confirm(question: &str) -> bool {
     println!("{}", question);
     loop {
@@ -18,3 +21,21 @@ pub fn format_duration(seconds: u32) -> String {
     let remaining_seconds = seconds % 60;
     format!("{:02}:{:02}", minutes, remaining_seconds)
 }
+
+pub fn amount_u64_to_f64(amount: u64) -> f64 {
+    (amount as f64) / 10f64.powf(TOKEN_DECIMALS as f64)
+}
+
+pub fn amount_f64_to_u64(amount: f64) -> u64 {
+    (amount * 10f64.powf(TOKEN_DECIMALS as f64)) as u64
+}
+
+pub fn format_timestamp(timestamp: i64) -> String {
+    let dt = Local.timestamp_opt(timestamp, 0).unwrap();
+    dt.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+pub fn amount_u64_to_string(amount: u64) -> String {
+    amount_u64_to_f64(amount).to_string()
+}
+

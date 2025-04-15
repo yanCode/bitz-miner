@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use eore_api::state::Proof;
+use eore_api::{
+    consts::CONFIG_ADDRESS,
+    state::{Config, Proof, proof_pda},
+};
 use eore_boost_api::state::Boost;
 use serde::Deserialize;
 use solana_client::{
@@ -22,6 +25,12 @@ pub enum ComputeBudget {
     Fixed(u32),
 }
 
+pub async fn get_config(client: &RpcClient) -> Result<Config> {
+    let data = client.get_account_data(&CONFIG_ADDRESS).await?;
+    let config = Config::try_from_bytes(&data)?;
+    Ok(*config)
+}
+
 pub async fn get_mint(client: &RpcClient, address: Pubkey) -> Result<Mint> {
     let mint_data = client.get_account_data(&address).await?;
     let mint = Mint::unpack(&mint_data)?;
@@ -32,6 +41,28 @@ pub async fn get_proof(client: &RpcClient, address: Pubkey) -> Result<Proof> {
     let data = client.get_account_data(&address).await?;
     let proof = Proof::try_from_bytes(&data)?;
     Ok(*proof)
+}
+
+pub async fn get_proof_with_authority(client: &RpcClient, authority: Pubkey) -> Result<Proof> {
+    let address = proof_pda(authority).0;
+    let data = client.get_account_data(&address).await?;
+    let proof = Proof::try_from_bytes(&data)?;
+    Ok(*proof)
+}
+//todo: reactor
+pub async fn get_updated_proof_with_authority(
+    client: &RpcClient,
+    authority: Pubkey,
+    lash_hash_at: i64,
+) -> Result<Proof, anyhow::Error> {
+    loop {
+        if let Ok(proof) = get_proof_with_authority(client, authority).await {
+            if proof.last_hash_at.gt(&lash_hash_at) {
+                return Ok(proof);
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(1_000)).await;
+    }
 }
 
 pub async fn get_clock(client: &RpcClient) -> Result<Clock, anyhow::Error> {

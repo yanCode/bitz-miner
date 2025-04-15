@@ -1,7 +1,7 @@
 mod args;
 mod command;
-mod utils;
 mod send;
+mod utils;
 use std::sync::{Arc, RwLock};
 
 use args::{AccountArgs, CollectArgs};
