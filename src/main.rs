@@ -2,20 +2,19 @@ mod args;
 mod command;
 mod send;
 mod utils;
+mod constants;
 use std::sync::{Arc, RwLock};
 
-use args::{AccountArgs, CollectArgs};
+use anyhow::Result;
+use args::{AccountArgs, BenchmarkArgs, CollectArgs};
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    signature::{Keypair, read_keypair_file},
-};
+use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
 use utils::{PoolCollectingData, SoloCollectingData};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("info"));
     let args = Args::parse();
     let cli_config = match &args.config_file {
@@ -49,11 +48,15 @@ async fn main() {
     );
     let _signer = miner.signer();
     match args.command {
+        Commands::Benchmark(benchmark_args) => {
+            miner.benchmark(benchmark_args).await?;
+        }
         Commands::Collect(collect_args) => {
             println!("Collecting...{:?}", collect_args);
         }
         _ => {}
     }
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -187,4 +190,6 @@ enum Commands {
     Account(AccountArgs),
     #[command(about = "Start collecting on your local machine")]
     Collect(CollectArgs),
+    #[command(about = "Benchmark your machine's hashpower")]
+    Benchmark(BenchmarkArgs),
 }

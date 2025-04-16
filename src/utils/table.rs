@@ -1,6 +1,13 @@
 use colored::Colorize;
 use solana_sdk::signature::Signature;
-use tabled::Tabled;
+use tabled::{
+    Table, Tabled,
+    settings::{
+        Border, Color, Highlight, Padding,
+        object::Rows,
+        style::{BorderColor, LineText},
+    },
+};
 
 #[derive(Tabled)]
 pub struct TableData {
@@ -82,4 +89,22 @@ pub struct PoolCollectingData {
     pub my_difficulty: String,
     #[tabled(rename = "My Reward")]
     pub my_reward: String,
+}
+
+pub trait TableSectionTitle {
+    fn section_title(&mut self, row: usize, title: &str);
+}
+
+impl TableSectionTitle for Table {
+    fn section_title(&mut self, row: usize, title: &str) {
+        let title_color = Color::try_from(" ".bold().black().on_white().to_string()).unwrap();
+        self.with(
+            Highlight::new(Rows::single(row)).color(BorderColor::default().top(Color::FG_WHITE)),
+        );
+        self.with(Highlight::new(Rows::single(row)).border(Border::new().top('━')));
+        self.with(LineText::new(title, Rows::single(row)).color(title_color.clone()));
+        if row > 0 {
+            self.modify(Rows::single(row - 1), Padding::new(1, 1, 0, 1));
+        }
+    }
 }

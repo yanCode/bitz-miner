@@ -1,8 +1,13 @@
+use std::time::Duration;
+
 use colored::Colorize;
+use eore_api::error::OreError;
 use indicatif::ProgressBar;
-use log::{debug, error, info};
-use solana_client::client_error::Result as ClientResult;
+use log::{debug, error, info, warn};
+use solana_client::client_error::{ClientError, ClientErrorKind, Result as ClientResult};
+use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_rpc_client::spinner;
+use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::transaction::Transaction;
@@ -11,9 +16,20 @@ use solana_sdk::{
     signature::Signature,
     signer::Signer,
 };
+use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEncoding};
 
+use crate::utils::get_latest_blockhash_with_retries;
 use crate::{Miner, utils::ComputeBudget};
+
 const MIN_ETH_BALANCE: f64 = 0.0005;
+
+const RPC_RETRIES: usize = 0;
+const _SIMULATION_RETRIES: usize = 4;
+const GATEWAY_RETRIES: usize = 150;
+const CONFIRM_RETRIES: usize = 8;
+
+const CONFIRM_DELAY: u64 = 500;
+const GATEWAY_DELAY: u64 = 0;
 impl Miner {
     pub async fn send_and_confirm(
         &self,
@@ -111,33 +127,36 @@ impl Miner {
                     attempts
                 );
 
-                // Reset the compute unit price
-                if self.dynamic_fee {
-                    debug!("Computing dynamic priority fee");
-                    let fee = match self.get_dynamic_priority_fee().await {
-                        Ok(fee) => {
-                            debug!("Dynamic priority fee computed: {} microlamports", fee);
-                            progress_bar.println(format!("  Priority fee: {} microlamports", fee));
-                            fee
-                        }
-                        Err(err) => {
-                            let fee = self.priority_fee.unwrap_or(0);
-                            warn!("Failed to get dynamic fee: {}. Falling back to static value: {} microlamports", err, fee);
-                            log_warning(
-                                &progress_bar,
-                                &format!(
-                                    "{} Falling back to static value: {} microlamports",
-                                    err, fee
-                                ),
-                            );
-                            fee
-                        }
-                    };
+                // // Reset the compute unit price
+                // if self.dynamic_fee {
+                //     debug!("Computing dynamic priority fee");
+                //     let fee = match self.get_dynamic_priority_fee().await {
+                //         Ok(fee) => {
+                //             debug!("Dynamic priority fee computed: {} microlamports", fee);
+                //             progress_bar.println(format!("  Priority fee: {} microlamports", fee));
+                //             fee
+                //         }
+                //         Err(err) => {
+                //             let fee = self.priority_fee.unwrap_or(0);
+                //             warn!(
+                //                 "Failed to get dynamic fee: {}. Falling back to static value: {} microlamports",
+                //                 err, fee
+                //             );
+                //             log_warning(
+                //                 &progress_bar,
+                //                 &format!(
+                //                     "{} Falling back to static value: {} microlamports",
+                //                     err, fee
+                //                 ),
+                //             );
+                //             fee
+                //         }
+                //     };
 
-                    final_ixs.remove(1);
-                    final_ixs.insert(1, ComputeBudgetInstruction::set_compute_unit_price(fee));
-                    tx = Transaction::new_with_payer(&final_ixs, Some(&fee_payer.pubkey()));
-                }
+                //     final_ixs.remove(1);
+                //     final_ixs.insert(1, ComputeBudgetInstruction::set_compute_unit_price(fee));
+                //     tx = Transaction::new_with_payer(&final_ixs, Some(&fee_payer.pubkey()));
+                // }
 
                 // Resign the tx
                 debug!("Getting latest blockhash");
@@ -272,7 +291,6 @@ impl Miner {
                 }
             }
         }
-    }
 
         debug!("Starting send_and_confirm with {} instructions", ixs.len());
         let progress_bar = spinner::new_progress_bar();

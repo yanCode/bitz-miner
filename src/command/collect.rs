@@ -38,6 +38,13 @@ use tabled::{
 use tokio::time::sleep;
 
 impl Miner {
+    pub fn parse_cores(&self, cores: String) -> u64 {
+        if cores == "ALL" {
+            num_cpus::get() as u64
+        } else {
+            cores.parse::<u64>().unwrap()
+        }
+    }
     pub async fn collect(&self, args: CollectArgs) -> Result<()> {
         match args.pool_url {
             Some(pool_url) => {
@@ -51,6 +58,7 @@ impl Miner {
         self.open().await?;
         let core_num_str = args.cores;
         let cores = if core_num_str == "All" {
+            //todo replace
             num_cpus::get() as u64
         } else {
             core_num_str.parse::<u64>()?
@@ -139,12 +147,6 @@ impl Miner {
                 }
             }
         }
-
-        // let mut ixs = Vec::new();
-        // for _ in 0..cores {
-        //     let ix = eore_api::sdk::collect(self.signer().pubkey(), self.fee_payer().pubkey());
-        //     ixs.push(ix);
-        // }
     }
     async fn open(&self) -> Result<()> {
         let signer = self.signer();
@@ -185,7 +187,7 @@ impl Miner {
             .le(&clock.unix_timestamp)
     }
 
-    fn check_num_cores(&self, core: u64) -> Result<()> {
+    pub fn check_num_cores(&self, core: u64) -> Result<()> {
         let actual_cores = num_cpus::get() as u64;
         if core > actual_cores {
             return Err(anyhow::anyhow!(

@@ -1,0 +1,1 @@
+pub const BENCHMARK_TEST_DURATION: i64 = 30;

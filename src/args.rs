@@ -79,3 +79,15 @@ pub struct CollectArgs {
     )]
     pub verbose: bool,
 }
+
+#[derive(Parser, Debug)]
+pub struct BenchmarkArgs {
+    #[arg(
+        long,
+        short,
+        value_name = "THREAD_COUNT",
+        help = "The number of cores to use during the benchmark",
+        default_value = "1"
+    )]
+    pub cores: String,
+}
