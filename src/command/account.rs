@@ -1,3 +1,4 @@
+use anyhow::{Result, bail};
 use std::str::FromStr;
 
 use crate::{
@@ -19,26 +20,26 @@ use tabled::{
 };
 
 impl Miner {
-    pub async fn account(&self, args: AccountArgs) {
+    pub async fn account(&self, args: AccountArgs) -> Result<()> {
         if let Some(command) = args.command {
             match command {
                 // AccountCommand::Close(args) => self.close(args).await,
                 _ => unimplemented!(),
             }
         } else {
-            self.get_account(args).await;
+            self.get_account(args).await?;
         }
+        Ok(())
     }
 
-    async fn get_account(&self, args: AccountArgs) {
+    async fn get_account(&self, args: AccountArgs) -> Result<()> {
         // Parse account address
         let signer = self.signer();
         let address = if let Some(address) = &args.address {
             if let Ok(address) = Pubkey::from_str(&address) {
                 address
             } else {
-                println!("Invalid address: {:?}", address);
-                return;
+                bail!(anyhow::anyhow!("Invalid address: {:?}", address));
             }
         } else if args.proof.is_some() {
             return self.get_proof_account(args).await;
@@ -59,6 +60,7 @@ impl Miner {
         table.section_title(3, "Proof");
 
         println!("{table}\n");
+        Ok(())
     }
 
     async fn get_account_data(&self, authority: Pubkey, data: &mut Vec<TableData>) {
@@ -95,17 +97,16 @@ impl Miner {
         });
     }
 
-    async fn get_proof_account(&self, args: AccountArgs) {
+    async fn get_proof_account(&self, args: AccountArgs) -> Result<()> {
         // Parse account address
         let proof_address = if let Some(address) = &args.proof {
             if let Ok(address) = Pubkey::from_str(&address) {
                 address
             } else {
-                println!("Invalid address: {:?}", address);
-                return;
+                bail!(anyhow::anyhow!("Invalid address: {:?}", address));
             }
         } else {
-            return;
+            bail!(anyhow::anyhow!("Invalid address"));
         };
 
         // Aggregate data
@@ -125,6 +126,7 @@ impl Miner {
         table.section_title(3, "Proof");
 
         println!("{table}\n");
+        Ok(())
     }
     async fn get_proof_data(&self, authority: Pubkey, data: &mut Vec<TableData>) {
         // Parse addresses

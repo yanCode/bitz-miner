@@ -1,8 +1,8 @@
 mod args;
 mod command;
+mod constants;
 mod send;
 mod utils;
-mod constants;
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
@@ -52,13 +52,17 @@ async fn main() -> Result<()> {
             miner.benchmark(benchmark_args).await?;
         }
         Commands::Collect(collect_args) => {
-            println!("Collecting...{:?}", collect_args);
+            miner.collect(collect_args).await?;
         }
-        _ => {}
+        Commands::Account(account_args) => {
+            miner.account(account_args).await?;
+        }
+        // _ => {}
     }
     Ok(())
 }
-
+//
+#[allow(dead_code)]
 #[derive(Clone)]
 struct Miner {
     pub keypair_filepath: Option<String>,
