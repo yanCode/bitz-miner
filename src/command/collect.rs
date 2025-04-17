@@ -57,12 +57,6 @@ impl Miner {
     async fn collect_solo(&self, args: CollectArgs) -> Result<()> {
         self.open().await?;
         let core_num_str = args.cores;
-        // let cores = if core_num_str == "All" {
-        //     //todo replace
-        //     num_cpus::get() as u64
-        // } else {
-        //     core_num_str.parse::<u64>()?
-        // };
         let cores = self.parse_cores(core_num_str);
         self.check_num_cores(cores)?;
         let verbose = args.verbose;
@@ -73,15 +67,7 @@ impl Miner {
 
         loop {
             let config = get_config(&self.rpc_client).await?;
-            // 判断 args.min_difficulty 是否大于 config.min_difficulty
-            // 如果小于  则设置成 config.min_difficulty
-            // 如果大于 则设置成 args.min_difficulty
-            //todo refactor
-            let min_difficulty = if args.min_difficulty < config.min_difficulty as u32 {
-                config.min_difficulty as u32
-            } else {
-                args.min_difficulty as u32
-            };
+            let min_difficulty = args.min_difficulty.max(config.min_difficulty as u32);
             let proof =
                 get_updated_proof_with_authority(&self.rpc_client, signer.pubkey(), last_hash_at)
                     .await?;
