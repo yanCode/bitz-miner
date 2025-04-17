@@ -56,8 +56,7 @@ async fn main() -> Result<()> {
         }
         Commands::Account(account_args) => {
             miner.account(account_args).await?;
-        }
-        // _ => {}
+        } // _ => {}
     }
     Ok(())
 }

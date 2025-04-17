@@ -8,7 +8,7 @@ use crate::{
         get_clock, get_config, get_updated_proof_with_authority,
     },
 };
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use b64::FromBase64;
 use colored::Colorize;
@@ -57,12 +57,13 @@ impl Miner {
     async fn collect_solo(&self, args: CollectArgs) -> Result<()> {
         self.open().await?;
         let core_num_str = args.cores;
-        let cores = if core_num_str == "All" {
-            //todo replace
-            num_cpus::get() as u64
-        } else {
-            core_num_str.parse::<u64>()?
-        };
+        // let cores = if core_num_str == "All" {
+        //     //todo replace
+        //     num_cpus::get() as u64
+        // } else {
+        //     core_num_str.parse::<u64>()?
+        // };
+        let cores = self.parse_cores(core_num_str);
         self.check_num_cores(cores)?;
         let verbose = args.verbose;
         let signer = self.signer();
@@ -190,33 +191,39 @@ impl Miner {
     pub fn check_num_cores(&self, core: u64) -> Result<()> {
         let actual_cores = num_cpus::get() as u64;
         if core > actual_cores {
-            return Err(anyhow::anyhow!(
+            bail!(
                 "Requested cores {} is greater than actual cores {}",
                 core,
                 actual_cores
-            ));
+            );
         }
         Ok(())
     }
 
     async fn find_bus(&self) -> Pubkey {
-        // Fetch the bus with the largest balance
-        if let Ok(accounts) = self.rpc_client.get_multiple_accounts(&BUS_ADDRESSES).await {
-            let mut top_bus_balance: u64 = 0;
-            let mut top_bus = BUS_ADDRESSES[0];
-            for account in accounts {
-                if let Some(account) = account {
-                    if let Ok(bus) = Bus::try_from_bytes(&account.data) {
-                        if bus.rewards.gt(&top_bus_balance) {
-                            top_bus_balance = bus.rewards;
-                            top_bus = BUS_ADDRESSES[bus.id as usize];
-                        }
-                    }
-                }
-            }
-            return top_bus;
-        }
-        BUS_ADDRESSES[0]
+        self.rpc_client
+            .get_multiple_accounts(&BUS_ADDRESSES)
+            .await
+            .map(|accounts| {
+                accounts
+                    .iter()
+                    .enumerate()
+                    .fold(
+                        (BUS_ADDRESSES[0], 0u64),
+                        |(max_bus, max_rewards), (idx, account)| {
+                            if let Some(account) = account {
+                                if let Ok(bus) = Bus::try_from_bytes(&account.data) {
+                                    if bus.rewards > max_rewards {
+                                        return (BUS_ADDRESSES[idx], bus.rewards);
+                                    }
+                                }
+                            }
+                            (max_bus, max_rewards)
+                        },
+                    )
+                    .0
+            })
+            .unwrap_or(BUS_ADDRESSES[0])
     }
 
     fn update_solo_collecting_table(&self, verbose: bool) {
