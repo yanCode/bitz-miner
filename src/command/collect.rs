@@ -3,6 +3,7 @@ use std::{io::stdout, time::Duration};
 use crate::{
     Miner,
     args::CollectArgs,
+    constants::MAX_TRANSACTION_POLL_ATTEMPTS,
     utils::{
         ComputeBudget, SoloCollectingData, amount_u64_to_f64, find_hash_parallel, format_timestamp,
         get_clock, get_config, get_updated_proof_with_authority,
@@ -24,8 +25,13 @@ use eore_api::{
 };
 use log::error;
 use solana_program::pubkey::Pubkey;
-use solana_sdk::{signature::Signature, signer::Signer};
-use solana_transaction_status::{UiTransactionEncoding, option_serializer::OptionSerializer};
+use solana_sdk::{
+    native_token::Sol, signature::Signature, signer::Signer, transaction::Transaction,
+};
+use solana_transaction_status::{
+    EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding,
+    option_serializer::OptionSerializer,
+};
 use steel::AccountDeserialize;
 use tabled::{
     Table,
@@ -49,7 +55,7 @@ impl Miner {
         match args.pool_url {
             Some(pool_url) => {
                 error!("Collecting : {}", pool_url);
-                unimplemented!()
+                todo!()
             }
             None => self.collect_solo(args).await,
         }
@@ -233,7 +239,6 @@ impl Miner {
     }
 
     async fn fetch_solo_collect_event(&self, sig: Signature, verbose: bool) {
-        // Add loading row
         let collecting_data = SoloCollectingData::fetching(sig);
         let mut data = self.solo_collecting_data.write().unwrap();
         data.insert(0, collecting_data);
@@ -241,78 +246,77 @@ impl Miner {
             data.remove(0);
         }
         drop(data);
-
-        // Update table
         self.update_solo_collecting_table(verbose);
+        let tx = self.poll_transaction(sig).await;
+        if let Ok(tx) = tx {
+            let return_data = self.parse_transaction_meta(&tx).await;
+            if let Some(return_data) = return_data {
+                let mut data = self.solo_collecting_data.write().unwrap();
+                let event = MineEvent::from_bytes(&return_data);
+                let collecting_data = SoloCollectingData {
+                    signature: format_signature(&sig, verbose),
+                    block: tx.slot.to_string(),
+                    timestamp: format_timestamp(tx.block_time.unwrap_or_default()),
+                    difficulty: event.difficulty.to_string(),
+                    base_reward: format_reward(event.net_base_reward),
+                    boost_reward: format_reward(event.net_miner_boost_reward),
+                    total_reward: format_reward(event.net_reward),
+                    timing: format!("{}s", event.timing),
+                    status: "Confirmed".bold().green().to_string(),
+                };
 
-        // Poll for transaction
-        let mut tx;
-        let mut attempts = 0;
-        loop {
-            tx = self
-                .rpc_client
-                .get_transaction(&sig, UiTransactionEncoding::Json)
-                .await;
-            if tx.is_ok() {
-                break;
-            }
-            sleep(Duration::from_secs(1)).await;
-            attempts += 1;
-            if attempts > 30 {
-                break;
+                data.insert(0, collecting_data);
             }
         }
-
-        // Parse transaction response
-        if let Ok(tx) = tx {
-            if let Some(meta) = tx.transaction.meta {
-                if let OptionSerializer::Some(log_messages) = meta.log_messages {
-                    if let Some(return_log) = log_messages
-                        .iter()
-                        .find(|log| log.starts_with("Program return: "))
-                    {
-                        if let Some(return_data) =
-                            return_log.strip_prefix(&format!("Program return: {} ", eore_api::ID))
-                        {
-                            if let Ok(return_data) = return_data.from_base64() {
-                                let mut data = self.solo_collecting_data.write().unwrap();
-                                let event = MineEvent::from_bytes(&return_data);
-                                let collecting_data = SoloCollectingData {
-                                    signature: if verbose {
-                                        sig.to_string()
-                                    } else {
-                                        format!("{}...", sig.to_string()[..8].to_string())
-                                    },
-                                    block: tx.slot.to_string(),
-                                    timestamp: format_timestamp(tx.block_time.unwrap_or_default()),
-                                    difficulty: event.difficulty.to_string(),
-                                    base_reward: if event.net_base_reward > 0 {
-                                        format!("{:#.11}", amount_u64_to_f64(event.net_base_reward))
-                                    } else {
-                                        "0".to_string()
-                                    },
-                                    boost_reward: if event.net_miner_boost_reward > 0 {
-                                        format!(
-                                            "{:#.11}",
-                                            amount_u64_to_f64(event.net_miner_boost_reward)
-                                        )
-                                    } else {
-                                        "0".to_string()
-                                    },
-                                    total_reward: if event.net_reward > 0 {
-                                        format!("{:#.11}", amount_u64_to_f64(event.net_reward))
-                                    } else {
-                                        "0".to_string()
-                                    },
-                                    timing: format!("{}s", event.timing),
-                                    status: "Confirmed".bold().green().to_string(),
-                                };
-                                data.insert(0, collecting_data);
-                            }
-                        }
-                    }
+    }
+    async fn poll_transaction(
+        &self,
+        sig: Signature,
+    ) -> Result<EncodedConfirmedTransactionWithStatusMeta> {
+        for _ in 0..MAX_TRANSACTION_POLL_ATTEMPTS {
+            match self
+                .rpc_client
+                .get_transaction(&sig, UiTransactionEncoding::Json)
+                .await
+            {
+                Ok(tx) => return Ok(tx),
+                Err(_) => {
+                    sleep(Duration::from_secs(1)).await;
                 }
             }
         }
+        bail!("Failed to fetch transaction after 30 attempts")
+    }
+    async fn parse_transaction_meta(
+        &self,
+        tx: &EncodedConfirmedTransactionWithStatusMeta,
+    ) -> Option<Vec<u8>> {
+        let meta = tx.transaction.meta.as_ref()?;
+        if let OptionSerializer::Some(ref log_messages) = meta.log_messages {
+            let return_log = log_messages
+                .iter()
+                .find(|log| log.starts_with("Program return: "))?;
+            let return_data =
+                return_log.strip_prefix(&format!("Program return: {} ", eore_api::ID))?;
+
+            return_data.from_base64().ok()
+        } else {
+            None
+        }
+    }
+}
+
+fn format_signature(sig: &Signature, verbose: bool) -> String {
+    if verbose {
+        sig.to_string()
+    } else {
+        format!("{}...", &sig.to_string()[..8])
+    }
+}
+fn format_reward(reward: u64) -> String {
+    if reward > 0 {
+        format!("{:#.11}", amount_u64_to_f64(reward))
+    } else {
+        "0".to_string()
     }
 }
