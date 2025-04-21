@@ -127,7 +127,7 @@ impl Miner {
                     attempts
                 );
 
-                // // Reset the compute unit price
+                // Reset the compute unit price
                 // if self.dynamic_fee {
                 //     debug!("Computing dynamic priority fee");
                 //     let fee = match self.get_dynamic_priority_fee().await {
@@ -138,10 +138,7 @@ impl Miner {
                 //         }
                 //         Err(err) => {
                 //             let fee = self.priority_fee.unwrap_or(0);
-                //             warn!(
-                //                 "Failed to get dynamic fee: {}. Falling back to static value: {} microlamports",
-                //                 err, fee
-                //             );
+                //             warn!("Failed to get dynamic fee: {}. Falling back to static value: {} microlamports", err, fee);
                 //             log_warning(
                 //                 &progress_bar,
                 //                 &format!(
@@ -199,76 +196,24 @@ impl Miner {
                                 for status in signature_statuses.value {
                                     if let Some(status) = status {
                                         if let Some(err) = status.err {
-                                            debug!("Transaction error: {:?}", err);
-                                            match err {
-                                                // Instruction error
-                                                solana_sdk::transaction::TransactionError::InstructionError(_, err) => {
-                                                    match err {
-                                                        // Custom instruction error, parse into OreError
-                                                        solana_program::instruction::InstructionError::Custom(err_code) => {
-                                                            match err_code {
-                                                                e if e == OreError::NeedsReset as u32 => {
-                                                                    debug!("Needs reset error, retrying transaction");
-                                                                    attempts = 0;
-                                                                    log_error(&progress_bar, "Needs reset. Retrying...", false);
-                                                                    break 'confirm;
-                                                                },
-                                                                _ => {
-                                                                    error!("Custom instruction error: {}", err);
-                                                                    log_error(&progress_bar, &err.to_string(), true);
-                                                                    return Err(ClientError {
-                                                                        request: None,
-                                                                        kind: ClientErrorKind::Custom(err.to_string()),
-                                                                    });
-                                                                }
-                                                            }
-                                                        },
-
-                                                        // Non custom instruction error, return
-                                                        _ => {
-                                                            error!("Non-custom instruction error: {}", err);
-                                                            log_error(&progress_bar, &err.to_string(), true);
-                                                            return Err(ClientError {
-                                                                request: None,
-                                                                kind: ClientErrorKind::Custom(err.to_string()),
-                                                            });
-                                                        }
-                                                    }
-                                                },
-
-                                                // Non instruction error, return
-                                                _ => {
-                                                    error!("Non-instruction error: {}", err);
-                                                    log_error(&progress_bar, &err.to_string(), true);
-                                                    return Err(ClientError {
-                                                        request: None,
-                                                        kind: ClientErrorKind::Custom(err.to_string()),
-                                                    });
+                                            match handle_transaction_error(err, &progress_bar) {
+                                                TransactionErrorResult::RetryTransaction => {
+                                                    attempts = 0;
+                                                    break 'confirm;
+                                                }
+                                                TransactionErrorResult::PropagateError(err) => {
+                                                    return Err(err);
                                                 }
                                             }
                                         } else if let Some(confirmation) =
                                             status.confirmation_status
                                         {
-                                            debug!(
-                                                "Transaction confirmation status: {:?}",
-                                                confirmation
-                                            );
-                                            match confirmation {
-                                                TransactionConfirmationStatus::Processed => {
-                                                    debug!(
-                                                        "Transaction processed but not confirmed"
-                                                    );
-                                                }
-                                                TransactionConfirmationStatus::Confirmed
-                                                | TransactionConfirmationStatus::Finalized => {
-                                                    debug!("Transaction confirmed/finalized");
-                                                    progress_bar.finish_with_message(format!(
-                                                        "{} {}",
-                                                        "OK".bold().green(),
-                                                        sig
-                                                    ));
-                                                    return Ok(sig);
-                                                }
+                                            if let Some(sig) = handle_confirmation_status(
+                                                confirmation,
+                                                sig,
+                                                &progress_bar,
+                                            ) {
+                                                return Ok(sig);
                                             }
                                         }
                                     }
@@ -291,63 +236,8 @@ impl Miner {
                 }
             }
         }
-
-        debug!("Starting send_and_confirm with {} instructions", ixs.len());
-        let progress_bar = spinner::new_progress_bar();
-        let signer = self.signer();
-        let client = self.rpc_client.clone();
-        let fee_payer = self.fee_payer();
-
-        debug!("Using signer: {}", signer.pubkey());
-        debug!("Using fee payer: {}", fee_payer.pubkey());
-        debug!("RPC client URL: {}", client.url());
-        // Return error, if balance is zero
-        self.check_balance().await;
-        // Set compute budget
-        let mut final_ixs = vec![];
-        match compute_budget {
-            ComputeBudget::Dynamic => {
-                debug!("Using dynamic compute budget");
-                todo!("simulate tx")
-            }
-            ComputeBudget::Fixed(cus) => {
-                debug!("Using fixed compute budget: {} CUs", cus);
-                final_ixs.push(ComputeBudgetInstruction::set_compute_unit_limit(cus))
-            }
-        }
-        // Set compute unit price
-        let priority_fee = self.priority_fee.unwrap_or(0);
-        debug!("Setting compute unit price: {} microlamports", priority_fee);
-        final_ixs.push(ComputeBudgetInstruction::set_compute_unit_price(
-            priority_fee,
-        ));
-
-        // Add in user instructions
-        debug!("Adding {} user instructions", ixs.len());
-        // Log program addresses for original instructions
-        for (i, ix) in ixs.iter().enumerate() {
-            info!(
-                "Original Instruction #{}: Program ID = {}",
-                i, ix.program_id
-            );
-            debug!(
-                "  - Accounts: {:?}",
-                ix.accounts
-                    .iter()
-                    .map(|a| a.pubkey.to_string())
-                    .collect::<Vec<_>>()
-            );
-        }
-
-        final_ixs.extend_from_slice(ixs);
-
-        // Build tx
-        debug!("Building transaction with config: skip_preflight=true, commitment=Confirmed");
-        let mut tx = Transaction::new_with_payer(&final_ixs, Some(&fee_payer.pubkey()));
-
-        unimplemented!()
     }
-    #[allow(dead_code)]
+
     pub async fn check_balance(&self) {
         debug!("Checking balance for signer: {}", self.signer().pubkey());
         let balance = self
@@ -364,6 +254,80 @@ impl Miner {
             );
             error!("{error_msg}");
             panic!("{error_msg}");
+        }
+    }
+}
+
+enum TransactionErrorResult {
+    RetryTransaction,            // break 'confirm
+    PropagateError(ClientError), // return Err
+}
+
+fn handle_transaction_error(
+    err: solana_sdk::transaction::TransactionError,
+    progress_bar: &ProgressBar,
+) -> TransactionErrorResult {
+    debug!("Transaction error: {:?}", err);
+    match err {
+        // Instruction error
+        solana_sdk::transaction::TransactionError::InstructionError(_, err) => {
+            match err {
+                // Custom instruction error, parse into OreError
+                solana_program::instruction::InstructionError::Custom(err_code) => match err_code {
+                    e if e == OreError::NeedsReset as u32 => {
+                        debug!("Needs reset error, retrying transaction");
+                        log_error(&progress_bar, "Needs reset. Retrying...", false);
+                        TransactionErrorResult::RetryTransaction
+                    }
+                    _ => {
+                        error!("Custom instruction error: {}", err);
+                        log_error(&progress_bar, &err.to_string(), true);
+                        TransactionErrorResult::PropagateError(ClientError {
+                            request: None,
+                            kind: ClientErrorKind::Custom(err.to_string()),
+                        })
+                    }
+                },
+
+                // Non custom instruction error, return
+                _ => {
+                    error!("Non-custom instruction error: {}", err);
+                    log_error(&progress_bar, &err.to_string(), true);
+                    TransactionErrorResult::PropagateError(ClientError {
+                        request: None,
+                        kind: ClientErrorKind::Custom(err.to_string()),
+                    })
+                }
+            }
+        }
+
+        // Non instruction error, return
+        _ => {
+            error!("Non-instruction error: {}", err);
+            log_error(&progress_bar, &err.to_string(), true);
+            TransactionErrorResult::PropagateError(ClientError {
+                request: None,
+                kind: ClientErrorKind::Custom(err.to_string()),
+            })
+        }
+    }
+}
+
+fn handle_confirmation_status(
+    confirmation: TransactionConfirmationStatus,
+    sig: Signature,
+    progress_bar: &ProgressBar,
+) -> Option<Signature> {
+    debug!("Transaction confirmation status: {:?}", confirmation);
+    match confirmation {
+        TransactionConfirmationStatus::Processed => {
+            debug!("Transaction processed but not confirmed");
+            None // Continue checking
+        }
+        TransactionConfirmationStatus::Confirmed | TransactionConfirmationStatus::Finalized => {
+            debug!("Transaction confirmed/finalized");
+            progress_bar.finish_with_message(format!("{} {}", "OK".bold().green(), sig));
+            Some(sig) // Done, return the signature
         }
     }
 }
