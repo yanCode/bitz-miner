@@ -194,27 +194,29 @@ impl Miner {
                             Ok(signature_statuses) => {
                                 debug!("Got signature statuses: {:?}", signature_statuses);
                                 for status in signature_statuses.value {
-                                    if let Some(status) = status {
-                                        if let Some(err) = status.err {
-                                            match handle_transaction_error(err, &progress_bar) {
-                                                TransactionErrorResult::RetryTransaction => {
-                                                    attempts = 0;
-                                                    break 'confirm;
-                                                }
-                                                TransactionErrorResult::PropagateError(err) => {
-                                                    return Err(err);
-                                                }
+                                    let status = match status {
+                                        Some(status) => status,
+                                        None => continue,
+                                    };
+
+                                    if let Some(err) = status.err {
+                                        match handle_transaction_error(err, &progress_bar) {
+                                            TransactionErrorResult::RetryTransaction => {
+                                                attempts = 0;
+                                                break 'confirm;
                                             }
-                                        } else if let Some(confirmation) =
-                                            status.confirmation_status
-                                        {
-                                            if let Some(sig) = handle_confirmation_status(
-                                                confirmation,
-                                                sig,
-                                                &progress_bar,
-                                            ) {
-                                                return Ok(sig);
+                                            TransactionErrorResult::PropagateError(err) => {
+                                                return Err(err);
                                             }
+                                        }
+                                    }
+                                    if let Some(confirmation) = status.confirmation_status {
+                                        if let Some(sig) = handle_confirmation_status(
+                                            confirmation,
+                                            sig,
+                                            &progress_bar,
+                                        ) {
+                                            return Ok(sig);
                                         }
                                     }
                                 }
