@@ -91,3 +91,27 @@ pub struct BenchmarkArgs {
     )]
     pub cores: String,
 }
+
+#[derive(Parser, Debug)]
+pub struct ClaimArgs {
+    #[arg(
+        value_name = "AMOUNT",
+        help = "The amount of rewards to claim. Defaults to max."
+    )]
+    pub amount: Option<f64>,
+
+    #[arg(
+        long,
+        value_name = "WALLET_ADDRESS",
+        help = "Wallet address to receive claimed tokens."
+    )]
+    pub to: Option<String>,
+
+    #[arg(
+        long,
+        short,
+        value_name = "POOL_URL",
+        help = "The optional pool url to claim rewards from."
+    )]
+    pub pool_url: Option<String>,
+}

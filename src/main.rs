@@ -6,7 +6,7 @@ mod utils;
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
-use args::{AccountArgs, BenchmarkArgs, CollectArgs};
+use args::{AccountArgs, BenchmarkArgs, ClaimArgs, CollectArgs};
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -56,7 +56,10 @@ async fn main() -> Result<()> {
         }
         Commands::Account(account_args) => {
             miner.account(account_args).await?;
-        } // _ => {}
+        }
+        Commands::Claim(claim_args) => {
+            miner.claim(claim_args).await?;
+        }
     }
     Ok(())
 }
@@ -195,4 +198,6 @@ enum Commands {
     Collect(CollectArgs),
     #[command(about = "Benchmark your machine's hashpower")]
     Benchmark(BenchmarkArgs),
+    #[command(about = "Claim your collecting yield")]
+    Claim(ClaimArgs),
 }

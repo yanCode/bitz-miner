@@ -25,9 +25,7 @@ use eore_api::{
 };
 use log::error;
 use solana_program::pubkey::Pubkey;
-use solana_sdk::{
-    native_token::Sol, signature::Signature, signer::Signer, transaction::Transaction,
-};
+use solana_sdk::{signature::Signature, signer::Signer};
 use solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding,
     option_serializer::OptionSerializer,
