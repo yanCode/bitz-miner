@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::time::Duration;
 
 use anyhow::Result;
@@ -18,9 +19,7 @@ use steel::AccountDeserialize;
 
 pub const BLOCKHASH_QUERY_RETRIES: usize = 5;
 pub const BLOCKHASH_QUERY_DELAY: u64 = 500;
-
 pub enum ComputeBudget {
-    #[allow(dead_code)]
     Dynamic,
     Fixed(u32),
 }

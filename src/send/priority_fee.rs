@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{collections::HashMap, iter, str::FromStr};
 
 use crate::Miner;

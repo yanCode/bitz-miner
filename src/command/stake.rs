@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::str::FromStr;
 
 use crate::{
@@ -116,10 +117,9 @@ impl Miner {
         let stake_address = stake_pda(signer.pubkey(), boost_address).0;
         debug!("Derived stake PDA: {}", stake_address);
 
-        let boost = match get_boost(&self.rpc_client, boost_address).await {
+        match get_boost(&self.rpc_client, boost_address).await {
             Ok(boost) => {
                 info!("Found boost account with weight: {}", boost.weight);
-                boost
             }
             Err(err) => {
                 error!("ERROR: No boost account found for mint {}", mint_address);

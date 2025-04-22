@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::io::Read;
 
 use chrono::{Local, TimeZone};
@@ -38,4 +39,3 @@ pub fn format_timestamp(timestamp: i64) -> String {
 pub fn amount_u64_to_string(amount: u64) -> String {
     amount_u64_to_f64(amount).to_string()
 }
-
