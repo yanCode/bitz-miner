@@ -38,14 +38,11 @@ impl Miner {
     async fn get_account(&self, args: AccountArgs) -> Result<()> {
         // Parse account address
         let signer = self.signer();
-        let address = if let Some(address) = &args.address {
-            if let Ok(address) = Pubkey::from_str(&address) {
-                address
-            } else {
-                bail!(anyhow::anyhow!("Invalid address: {:?}", address));
-            }
-        } else if args.proof.is_some() {
+        if args.proof.is_some() {
             return self.get_proof_account(args).await;
+        }
+        let address = if let Some(address) = &args.address {
+            Pubkey::from_str(&address)?
         } else {
             signer.pubkey()
         };
