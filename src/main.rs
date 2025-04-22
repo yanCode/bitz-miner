@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
         solo_collecting_data,
         pool_collecting_data,
     );
-    let _signer = miner.signer();
+
     match args.command {
         Commands::Benchmark(benchmark_args) => {
             miner.benchmark(benchmark_args).await?;
@@ -172,7 +172,7 @@ struct Args {
         long,
         value_name = "KEYPAIR_FILEPATH",
         help = "Filepath to signer keypair. Base58 or Raw JSON.",
-        default_value = "key.txt",
+        // default_value = "key.txt",
         global = true
     )]
     keypair: Option<String>,
