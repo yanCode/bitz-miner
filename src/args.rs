@@ -26,7 +26,7 @@ pub enum AccountCommand {
 #[derive(Parser, Clone, Debug)]
 pub struct AccountCloseArgs {}
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct CollectArgs {
     #[arg(
         long,

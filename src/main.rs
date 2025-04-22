@@ -3,14 +3,19 @@ mod command;
 mod constants;
 mod send;
 mod utils;
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 use anyhow::Result;
 use args::{AccountArgs, BenchmarkArgs, ClaimArgs, CollectArgs, StakeArgs};
 use clap::{Parser, Subcommand};
 use env_logger::Env;
+use log::error;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Keypair};
+use tokio::time::sleep;
 use utils::{PoolCollectingData, SoloCollectingData};
 
 #[tokio::main]
@@ -51,9 +56,15 @@ async fn main() -> Result<()> {
         Commands::Benchmark(benchmark_args) => {
             miner.benchmark(benchmark_args).await?;
         }
-        Commands::Collect(collect_args) => {
-            miner.collect(collect_args).await?;
-        }
+        Commands::Collect(collect_args) => loop {
+            match miner.collect(collect_args.clone()).await {
+                Ok(_) => break,
+                Err(e) => {
+                    error!("Error in claim: {}. Restarting in 0.5 seconds...", e);
+                    sleep(Duration::from_millis(500)).await;
+                }
+            }
+        },
         Commands::Account(account_args) => {
             miner.account(account_args).await?;
         }

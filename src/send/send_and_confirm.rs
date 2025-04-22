@@ -106,7 +106,7 @@ impl Miner {
 
         // Build tx
         debug!("Building transaction with config: skip_preflight=true, commitment=Confirmed");
-        let send_cfg = RpcSendTransactionConfig {
+        let _send_cfg = RpcSendTransactionConfig {
             skip_preflight: true,
             preflight_commitment: Some(CommitmentLevel::Confirmed),
             encoding: Some(UiTransactionEncoding::Base64),

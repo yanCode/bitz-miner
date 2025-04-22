@@ -1,5 +1,3 @@
-use std::{io::stdout, time::Duration};
-
 use crate::{
     Miner,
     args::CollectArgs,
@@ -10,6 +8,7 @@ use crate::{
     },
 };
 use anyhow::{Result, bail};
+use std::{io::stdout, time::Duration};
 
 use b64::FromBase64;
 use colored::Colorize;
@@ -76,7 +75,7 @@ impl Miner {
                 get_updated_proof_with_authority(&self.rpc_client, signer.pubkey(), last_hash_at)
                     .await?;
             // Log collecting table
-            self.update_solo_collecting_table(verbose);
+            self.update_solo_collecting_table(verbose)?;
             last_hash_at = proof.last_hash_at;
             // Calculate cutoff time
             let cutoff_time = self.get_cutoff(proof.last_hash_at, args.buffer_time).await;
@@ -120,10 +119,15 @@ impl Miner {
                 .send_and_confirm(&ixs, ComputeBudget::Fixed(compute_budget), false)
                 .await
             {
-                Ok(sig) => self.fetch_solo_collect_event(sig, verbose).await,
+                Ok(sig) => self.fetch_solo_collect_event(sig, verbose).await?,
                 Err(err) => {
                     let collecting_data = SoloCollectingData::failed();
-                    let mut data = self.solo_collecting_data.write().unwrap();
+                    let mut data = self.solo_collecting_data.write().map_err(|e| {
+                        anyhow::anyhow!(
+                            "failed to write to solo_collecting_data: lock poisoned: {}",
+                            e
+                        )
+                    })?;
                     if !data.is_empty() {
                         data.remove(0);
                     }
@@ -131,10 +135,10 @@ impl Miner {
                     drop(data);
 
                     // Log collecting table
-                    self.update_solo_collecting_table(verbose);
+                    self.update_solo_collecting_table(verbose)?;
                     println!("{}: {}", "ERROR".bold().red(), err);
 
-                    return Err(err.into());
+                    bail!(err);
                 }
             }
         }
@@ -216,11 +220,12 @@ impl Miner {
             .unwrap_or(BUS_ADDRESSES[0])
     }
 
-    fn update_solo_collecting_table(&self, verbose: bool) {
-        //todo refactor
-        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0)).expect("Failed to clear screen");
+    fn update_solo_collecting_table(&self, verbose: bool) -> Result<()> {
+        execute!(stdout(), Clear(ClearType::All), MoveTo(0, 0))?;
         let mut rows: Vec<SoloCollectingData> = vec![];
-        let data = self.solo_collecting_data.read().unwrap();
+        let data = self.solo_collecting_data.read().map_err(|e| {
+            anyhow::anyhow!("failed to read solo_collecting_data: lock poisoned: {}", e)
+        })?;
         rows.extend(data.iter().cloned());
         let mut table = Table::new(&rows);
         table.with(Style::blank());
@@ -234,22 +239,33 @@ impl Miner {
             table.with(Remove::column(Columns::new(1..3)));
         }
         println!("\n{}\n", table);
+        Ok(())
     }
 
-    async fn fetch_solo_collect_event(&self, sig: Signature, verbose: bool) {
+    async fn fetch_solo_collect_event(&self, sig: Signature, verbose: bool) -> Result<()> {
         let collecting_data = SoloCollectingData::fetching(sig);
-        let mut data = self.solo_collecting_data.write().unwrap();
+        let mut data = self.solo_collecting_data.write().map_err(|e| {
+            anyhow::anyhow!(
+                "failed to write to solo_collecting_data: lock poisoned: {}",
+                e
+            )
+        })?;
         data.insert(0, collecting_data);
         if !data.is_empty() {
             data.remove(0);
         }
         drop(data);
-        self.update_solo_collecting_table(verbose);
+        self.update_solo_collecting_table(verbose)?;
         let tx = self.poll_transaction(sig).await;
         if let Ok(tx) = tx {
             let return_data = self.parse_transaction_meta(&tx).await;
             if let Some(return_data) = return_data {
-                let mut data = self.solo_collecting_data.write().unwrap();
+                let mut data = self.solo_collecting_data.write().map_err(|e| {
+                    anyhow::anyhow!(
+                        "failed to write to solo_collecting_data: lock poisoned: {}",
+                        e
+                    )
+                })?;
                 let event = MineEvent::from_bytes(&return_data);
                 let collecting_data = SoloCollectingData {
                     signature: format_signature(&sig, verbose),
@@ -266,6 +282,7 @@ impl Miner {
                 data.insert(0, collecting_data);
             }
         }
+        Ok(())
     }
     async fn poll_transaction(
         &self,
