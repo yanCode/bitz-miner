@@ -20,11 +20,8 @@ pub struct AccountArgs {
 #[derive(Subcommand, Clone, Debug)]
 pub enum AccountCommand {
     #[command(about = "Close an account and reclaim rent.")]
-    Close(AccountCloseArgs),
+    Close,
 }
-
-#[derive(Parser, Clone, Debug)]
-pub struct AccountCloseArgs {}
 
 #[derive(Parser, Debug, Clone)]
 pub struct CollectArgs {

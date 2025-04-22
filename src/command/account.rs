@@ -3,7 +3,11 @@ use std::str::FromStr;
 
 use crate::{
     AccountArgs, Miner,
-    utils::{TableData, TableSectionTitle, amount_u64_to_f64, format_timestamp, get_proof},
+    args::{AccountCommand, ClaimArgs},
+    utils::{
+        ComputeBudget, TableData, TableSectionTitle, amount_u64_to_f64, ask_confirm,
+        format_timestamp, get_proof, get_proof_with_authority,
+    },
 };
 use colored::Colorize;
 use eore_api::state::proof_pda;
@@ -23,8 +27,7 @@ impl Miner {
     pub async fn account(&self, args: AccountArgs) -> Result<()> {
         if let Some(command) = args.command {
             match command {
-                // AccountCommand::Close(args) => self.close(args).await,
-                _ => unimplemented!(),
+                AccountCommand::Close => self.close().await?,
             }
         } else {
             self.get_account(args).await?;
@@ -62,7 +65,36 @@ impl Miner {
         println!("{table}\n");
         Ok(())
     }
+    async fn close(&self) -> Result<()> {
+        let signer = self.signer();
+        let proof = get_proof_with_authority(&self.rpc_client, signer.pubkey())
+            .await
+            .expect("Failed to fetch proof account");
+        // Confirm the user wants to close.
+        if !ask_confirm(
+            format!("{} You have {} BITZ staked in this account.\nAre you sure you want to {}close this account? [Y/n]", 
+                "WARNING:".bold().yellow(),
+                amount_to_ui_amount(proof.balance, eore_api::consts::TOKEN_DECIMALS),
+                if proof.balance.gt(&0) { "claim your stake and "} else { "" }
+            ).as_str()
+        ) {
+            return Ok(());
+        }
+        // Claim stake
+        if proof.balance.gt(&0) {
+            self.claim_from_proof(ClaimArgs {
+                amount: None,
+                to: None,
+                pool_url: None,
+            })
+            .await?;
+        }
+        let ix = eore_api::sdk::close(signer.pubkey());
+        self.send_and_confirm(&[ix], ComputeBudget::Fixed(500_000), false)
+            .await?;
 
+        Ok(())
+    }
     async fn get_account_data(&self, authority: Pubkey, data: &mut Vec<TableData>) {
         let token_account_address =
             get_associated_token_address(&authority, &eore_api::consts::MINT_ADDRESS);
