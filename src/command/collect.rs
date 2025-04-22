@@ -151,10 +151,8 @@ impl Miner {
             let mut ixs = Vec::new();
             let ix = eore_api::sdk::open(signer.pubkey(), signer.pubkey(), fee_payer.pubkey());
             ixs.push(ix);
-            // self.rpc_client
-            //     .send_and_confirm(&ixs, ComputeBudget::Fixed(400_000), false)
-            //     .await?;
-            unimplemented!()
+            self.send_and_confirm(&ixs, ComputeBudget::Fixed(400_000), false)
+                .await?;
         }
 
         Ok(())

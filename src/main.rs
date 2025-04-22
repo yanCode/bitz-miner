@@ -28,11 +28,12 @@ async fn main() -> Result<()> {
             std::process::exit(1);
         }),
         None => {
+            let default_config_path = solana_cli_config::CONFIG_FILE.as_ref().unwrap();
             println!(
                 "No config file provided, using default config: {:?}",
-                solana_cli_config::CONFIG_FILE.as_ref().unwrap()
+                default_config_path
             );
-            solana_cli_config::Config::default()
+            solana_cli_config::Config::load(default_config_path)?
         }
     };
     let cluster_url = args.rpc.unwrap_or(cli_config.json_rpc_url);

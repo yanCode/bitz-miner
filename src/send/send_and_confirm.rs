@@ -11,12 +11,9 @@ use solana_rpc_client::spinner;
 use solana_sdk::commitment_config::CommitmentLevel;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
+use solana_sdk::native_token::{lamports_to_sol, sol_to_lamports};
 use solana_sdk::transaction::Transaction;
-use solana_sdk::{
-    native_token::{lamports_to_sol, sol_to_lamports},
-    signature::Signature,
-    signer::Signer,
-};
+use solana_sdk::{signature::Signature, signer::Signer};
 use solana_transaction_status::{TransactionConfirmationStatus, UiTransactionEncoding};
 
 use crate::utils::get_latest_blockhash_with_retries;
