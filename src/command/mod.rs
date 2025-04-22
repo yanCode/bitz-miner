@@ -1,4 +1,5 @@
 mod account;
 mod benchmark;
-mod collect;
 mod claim;
+mod collect;
+mod stake;

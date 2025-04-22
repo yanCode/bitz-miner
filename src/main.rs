@@ -6,7 +6,7 @@ mod utils;
 use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
-use args::{AccountArgs, BenchmarkArgs, ClaimArgs, CollectArgs};
+use args::{AccountArgs, BenchmarkArgs, ClaimArgs, CollectArgs, StakeArgs};
 use clap::{Parser, Subcommand};
 use env_logger::Env;
 use solana_client::nonblocking::rpc_client::RpcClient;
@@ -59,6 +59,9 @@ async fn main() -> Result<()> {
         }
         Commands::Claim(claim_args) => {
             miner.claim(claim_args).await?;
+        }
+        Commands::Stake(stake_args) => {
+            miner.stake(stake_args).await?;
         }
     }
     Ok(())
@@ -200,4 +203,6 @@ enum Commands {
     Benchmark(BenchmarkArgs),
     #[command(about = "Claim your collecting yield")]
     Claim(ClaimArgs),
+    #[command(about = "Manage your stake positions")]
+    Stake(StakeArgs),
 }
